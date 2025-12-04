@@ -8,7 +8,7 @@ class RepoFetcher:
         self.validator = URLValidator()
         self.storage = StorageManager()
 
-    def fetch(self, repo_url: str) -> str:
+    def fetch_repo(self, repo_url: str) -> str:
         # ✅ Validate & clean URL
         clean_url = self.validator.validate(repo_url)
 
@@ -26,3 +26,7 @@ class RepoFetcher:
             raise Exception(f"Git clone failed: {result.stderr}")
 
         return target_dir
+
+    # 🔄 Optional: Keep old name for compatibility
+    def fetch(self, repo_url: str) -> str:
+        return self.fetch_repo(repo_url)
