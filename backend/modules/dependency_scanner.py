@@ -1,89 +1,74 @@
 import os
+import json
 from pathlib import Path
 from typing import List, Dict, Optional
-import re
 
 
 class DependencyScanner:
-
     SUPPORTED_FILES = {
-        "requirements.txt": "python",
-        "package.json": "javascript",
-        "Pipfile": "python",
-        "pyproject.toml": "python"
+        "package.json": "npm",
+        "requirements.txt": "pypi",
+        "composer.json": "composer"
     }
 
     def __init__(self, repo_path: str):
         self.repo_path = Path(repo_path)
 
-    def find_dependency_files(self) -> List[Dict[str, str]]:
-        found_files = []
+    def scan(self) -> Dict:
+        results = {"dependencies": [], "files_found": []}
 
-        for filename, file_type in self.SUPPORTED_FILES.items():
+        for filename, eco in self.SUPPORTED_FILES.items():
             file_path = self.repo_path / filename
             if file_path.exists():
-                found_files.append({
+                results["files_found"].append({
                     "filename": filename,
                     "path": str(file_path),
-                    "type": file_type
+                    "ecosystem": eco
                 })
 
-        return found_files
+                if filename == "package.json":
+                    results["dependencies"].extend(self._parse_package_json(file_path))
 
-    def parse_requirements_txt(self, file_path: str) -> List[Dict[str, Optional[str]]]:
-        dependencies = []
+                elif filename == "requirements.txt":
+                    results["dependencies"].extend(self._parse_requirements(file_path))
 
+                elif filename == "composer.json":
+                    results["dependencies"].extend(self._parse_composer(file_path))
+
+        return results
+
+    def _parse_package_json(self, path: Path):
+        deps = []
         try:
-            with open(file_path, "r") as f:
-                for line in f:
-                    line = line.strip()
+            data = json.loads(path.read_text())
+            for section in ["dependencies", "devDependencies"]:
+                for name, ver in data.get(section, {}).items():
+                    deps.append({"name": name, "version": ver, "ecosystem": "npm"})
+        except:
+            pass
+        return deps
 
-                    if not line or line.startswith("#"):
-                        continue
-                    if line.startswith("-e") or line.startswith("http"):
-                        continue
+    def _parse_requirements(self, path: Path):
+        deps = []
+        try:
+            for line in path.read_text().splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "@" in line:
+                    continue
+                if "==" in line:
+                    name, ver = line.split("==")
+                    deps.append({"name": name, "version": ver, "ecosystem": "pypi"})
+        except:
+            pass
+        return deps
 
-                    parsed = self._parse_line(line)
-                    if parsed:
-                        dependencies.append(parsed)
-
-        except Exception as e:
-            raise Exception(f"Failed to parse requirements.txt: {str(e)}")
-
-        return dependencies
-
-    def _parse_line(self, line: str):
-        line = line.split("#")[0].strip()
-
-        patterns = [
-            r"^([a-zA-Z0-9\-_\.]+)==(.+)$",
-            r"^([a-zA-Z0-9\-_\.]+)>=(.+)$",
-            r"^([a-zA-Z0-9\-_\.]+)~=(.+)$",
-            r"^([a-zA-Z0-9\-_\.]+)$",
-        ]
-
-        for p in patterns:
-            match = re.match(p, line)
-            if match:
-                name = match.group(1)
-                version = match.group(2) if match.lastindex and match.lastindex > 1 else None
-                return {"name": name, "version": version}
-
-        return None
-
-    def scan(self) -> Dict:
-        result = {
-            "files_found": [],
-            "dependencies": []
-        }
-
-        files = self.find_dependency_files()
-        result["files_found"] = files
-
-        for file in files:
-            if file["filename"] == "requirements.txt":
-                result["dependencies"].extend(
-                    self.parse_requirements_txt(file["path"])
-                )
-
-        return result
+    def _parse_composer(self, path: Path):
+        deps = []
+        try:
+            data = json.loads(path.read_text())
+            for section in ["require", "require-dev"]:
+                for name, ver in data.get(section, {}).items():
+                    deps.append({"name": name, "version": ver, "ecosystem": "composer"})
+        except:
+            pass
+        return deps

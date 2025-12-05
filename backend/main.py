@@ -50,7 +50,15 @@ def analyze_repo(request: AnalyzeRequest):
         analyzer = DependencyAnalyzer()
         report = analyzer.analyze(request.local_path)
 
-        return {"analysis_report": report}
+        flat = {
+            "total_packages": report["summary"]["total_packages"],
+            "outdated_count": report["summary"]["outdated_count"],
+            "health_score": report["health_score"],
+            "outdated_packages": report["outdated_packages"],
+            "partial_analysis": report["partial"]
+        }
+
+        return {"analysis_report": flat}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
